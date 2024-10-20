@@ -1,3 +1,120 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <signal.h>
+
+#define MAX_HISTORY 100
+#define MAX_COMMAND_LENGTH 1024
+#define MAX_READY_QUEUE 100
+
+// Global history array
+char *history[MAX_HISTORY];
+int history_count = 0;
+
+// Struct to store process information
+typedef struct {
+    char *command;
+    pid_t pid;
+    time_t start_time;
+    time_t end_time;
+    time_t wait_time;
+    int is_completed;
+} Process;
+
+Process ready_queue[MAX_READY_QUEUE];
+int ready_queue_count = 0;
+int num_cpus;
+int timeslice;
+
+// Function to add command to history
+void add_to_history(const char *command) {
+    if (history_count < MAX_HISTORY) {
+        history[history_count++] = strdup(command);
+    }
+}
+
+// Function to display history
+void show_history() {
+    for (int i = 0; i < history_count; i++) {
+        printf("%d %s\n", i + 1, history[i]);
+    }
+}
+
+// Function to add a process to the ready queue
+void submit_process(const char *command) {
+    if (ready_queue_count < MAX_READY_QUEUE) {
+        Process *new_process = &ready_queue[ready_queue_count++];
+        new_process->command = strdup(command);
+        new_process->pid = -1;
+        new_process->start_time = 0;
+        new_process->end_time = 0;
+        new_process->wait_time = 0;
+        new_process->is_completed = 0;
+        printf("Process submitted: %s\n", command);
+    } else {
+        printf("Ready queue is full!\n");
+    }
+}
+
+// Function to execute or resume a process in the ready queue
+void execute_process(Process *process) {
+    if (process->pid == -1) {
+        // First time execution (fork and exec)
+        char *args[MAX_COMMAND_LENGTH / 2 + 1];
+        int i = 0;
+        char *token = strtok(process->command, " ");
+        while (token != NULL) {
+            args[i++] = token;
+            token = strtok(NULL, " ");
+        }
+        args[i] = NULL;
+
+        pid_t pid = fork();
+        if (pid == 0) {  // Child process
+            if (execvp(args[0], args) == -1) {
+                perror("SimpleShell");
+            }
+            exit(EXIT_FAILURE);
+        } else if (pid > 0) {
+            process->pid = pid;
+            process->start_time = time(NULL);
+        } else {
+            perror("SimpleShell: Fork failed");
+        }
+    } else {
+        // Resume the process from where it left off
+        kill(process->pid, SIGCONT);
+    }
+
+    sleep(timeslice);  // Simulate running the process for the timeslice
+    kill(process->pid, SIGSTOP);  // Pause the process after the timeslice
+}
+
+// Function to check if a process is completed
+int is_process_completed(Process *process) {
+    int status;
+    pid_t result = waitpid(process->pid, &status, WNOHANG);  // Check non-blocking
+    if (result == 0) {
+        // Process still running
+        return 0;
+    } else if (result == -1) {
+        perror("Error during waitpid");
+        return 1;  // Consider process completed on error
+    } else {
+        // Process finished
+        if (WIFEXITED(status) || WIFSIGNALED(status)) {
+            process->is_completed = 1;
+            process->end_time = time(NULL);
+            return 1;
+        }
+    }
+    return 0;
+}
+
 // Additional array for completed processes
 Process completed_processes[MAX_READY_QUEUE];
 int completed_count = 0;
@@ -115,3 +232,4 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+
