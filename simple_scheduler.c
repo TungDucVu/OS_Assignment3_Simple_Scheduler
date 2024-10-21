@@ -18,6 +18,7 @@ int history_count = 0;
 // Struct to store process information
 typedef struct {
     char *command;
+    char *name;
     pid_t pid;
     time_t start_time;
     time_t end_time;
@@ -29,6 +30,10 @@ Process ready_queue[MAX_READY_QUEUE];
 int ready_queue_count = 0;
 int num_cpus;
 int timeslice;
+
+// Additional array for completed processes
+Process completed_processes[MAX_READY_QUEUE];
+int completed_count = 0;
 
 // Function to add command to history
 void add_to_history(const char *command) {
@@ -49,6 +54,7 @@ void submit_process(const char *command) {
     if (ready_queue_count < MAX_READY_QUEUE) {
         Process *new_process = &ready_queue[ready_queue_count++];
         new_process->command = strdup(command);
+        new_process->name = strdup(command);
         new_process->pid = -1;
         new_process->start_time = 0;
         new_process->end_time = 0;
@@ -115,15 +121,19 @@ int is_process_completed(Process *process) {
     return 0;
 }
 
-// Additional array for completed processes
-Process completed_processes[MAX_READY_QUEUE];
-int completed_count = 0;
+
 
 // Updated Function to simulate round-robin execution
 void round_robin_execution() {
     while (ready_queue_count > 0) {
         for (int i = 0; i < ready_queue_count; i++) {
             Process *p = &ready_queue[i];
+	for (int j = 0 ; j < ready_queue_count; j++) {
+                if (j != i && !ready_queue[j].is_completed) {
+                    ready_queue[j].wait_time += timeslice;
+                }
+            }
+            
 
             // Only execute if the process has not completed
             if (!p->is_completed) {
@@ -166,7 +176,7 @@ void print_process_results() {
     printf("\nProcess Results:\n");
     for (int i = 0; i < completed_count; i++) {
         Process *p = &completed_processes[i];
-        printf("Process: %s\n", p->command);
+        printf("Process: %s\n", p->name);
         printf("Time Taken: %f seconds\n", difftime(p->end_time, p->start_time));
         printf("Waiting Time: %ld seconds\n\n", p->wait_time);
     }
