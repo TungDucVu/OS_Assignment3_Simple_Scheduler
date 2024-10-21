@@ -128,7 +128,7 @@ void round_robin_execution() {
     while (ready_queue_count > 0) {
         for (int i = 0; i < ready_queue_count; i++) {
             Process *p = &ready_queue[i];
-	for (int j = 0 ; j < ready_queue_count; j++) {
+            for (int j = 0 ; j < ready_queue_count; j++) {
                 if (j != i && !ready_queue[j].is_completed) {
                     ready_queue[j].wait_time += timeslice;
                 }
